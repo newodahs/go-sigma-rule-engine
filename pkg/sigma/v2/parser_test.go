@@ -430,9 +430,26 @@ var detection13_negative = `
 }
 `
 
+//this has a hacky test; we set 'noCollapseWSNeg' in the parseTestCast struct for this case specifically
+//doing so will turn off collapsing the whitespace for the negative test and cause this to fail detection
+var detection14 = `
+detection:
+  condition: "selection"
+  selection:
+    SomeName|contains:
+      - 'whitespace   collapse	testing'
+`
+
+var detection14_case = `
+{
+	"SomeName":       "whitespace\t\tcollapse         testing"
+}
+`
+
 type parseTestCase struct {
-	Rule     string
-	Pos, Neg []string
+	Rule            string
+	Pos, Neg        []string
+	noCollapseWSNeg bool
 }
 
 var parseTestCases = []parseTestCase{
@@ -501,6 +518,16 @@ var parseTestCases = []parseTestCase{
 		Pos:  []string{detection13_positive},
 		Neg:  []string{detection13_negative},
 	},
+	{
+		Rule:            detection14,
+		Pos:             []string{detection14_case},
+		noCollapseWSNeg: false, //ensures whitespace is collapsed and everything matches
+	},
+	{
+		Rule:            detection14,
+		Neg:             []string{detection14_case},
+		noCollapseWSNeg: true, //turns off whitespace collapsing and causing a non-match
+	},
 }
 
 func TestTokenCollect(t *testing.T) {
@@ -524,7 +551,8 @@ func TestParse(t *testing.T) {
 		if err := yaml.Unmarshal([]byte(c.Rule), &rule); err != nil {
 			t.Fatalf("rule parse case %d failed to unmarshal yaml, %s", i+1, err)
 		}
-		expr := rule.Detection["condition"].(string)
+		rule.NoCollapseWS = c.noCollapseWSNeg
+		expr := rule.Detection.Fields["condition"].(string)
 		p := &parser{
 			lex:   lex(expr),
 			sigma: rule.Detection,

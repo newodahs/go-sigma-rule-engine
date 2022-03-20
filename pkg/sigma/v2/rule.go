@@ -40,7 +40,7 @@ type Rule struct {
 }
 
 // NewRuleList reads a list of sigma rule paths and parses them to rule objects
-func NewRuleList(files []string, skip bool) ([]RuleHandle, error) {
+func NewRuleList(files []string, skip, noCollapseWS bool) ([]RuleHandle, error) {
 	if len(files) == 0 {
 		return nil, fmt.Errorf("missing rule file list")
 	}
@@ -64,6 +64,7 @@ loop:
 			}
 			return nil, &ErrParseYaml{Err: err, Path: path}
 		}
+		r.NoCollapseWS = noCollapseWS
 		rules = append(rules, RuleHandle{
 			Path: path,
 			Rule: r,
@@ -91,11 +92,14 @@ type Logsource struct {
 
 // Detection represents the detection field in sigma rule
 // contains condition expression and identifier fields for building AST
-type Detection map[string]interface{}
+type Detection struct {
+	Fields       map[string]interface{} `yaml:",inline"`
+	NoCollapseWS bool                   `yaml:"-" json:"-"` //ignore this, this is our own...
+}
 
 func (d Detection) Extract() map[string]interface{} {
 	tx := make(map[string]interface{})
-	for k, v := range d {
+	for k, v := range d.Fields {
 		if k != "condition" {
 			tx[k] = v
 		}
