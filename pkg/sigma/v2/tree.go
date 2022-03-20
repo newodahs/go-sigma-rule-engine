@@ -37,10 +37,10 @@ func (t Tree) Eval(e Event) (*Result, bool) {
 
 // NewTree parses rule handle into an abstract syntax tree
 func NewTree(r RuleHandle) (*Tree, error) {
-	if r.Detection == nil {
+	if r.Detection.Fields == nil {
 		return nil, ErrMissingDetection{}
 	}
-	expr, ok := r.Detection["condition"].(string)
+	expr, ok := r.Detection.Fields["condition"].(string)
 	if !ok {
 		return nil, ErrMissingCondition{}
 	}
@@ -73,11 +73,11 @@ func newBranch(d Detection, t []Item, depth int) (Branch, error) {
 	for item := range rx {
 		switch item.T {
 		case TokIdentifier:
-			val, ok := d[item.Val]
+			val, ok := d.Fields[item.Val]
 			if !ok {
 				return nil, ErrMissingConditionItem{Key: item.Val}
 			}
-			b, err := newRuleFromIdent(val, checkIdentType(item.Val, val))
+			b, err := newRuleFromIdent(val, checkIdentType(item.Val, val), d.NoCollapseWS)
 			if err != nil {
 				return nil, err
 			}
@@ -192,7 +192,7 @@ func extractAndBuildBranches(d Detection, g *glob.Glob) ([]Branch, error) {
 	}
 	rules := make(NodeSimpleAnd, len(vals))
 	for i, v := range vals {
-		b, err := newRuleFromIdent(v, identSelection)
+		b, err := newRuleFromIdent(v, identSelection, d.NoCollapseWS)
 		if err != nil {
 			return nil, err
 		}
@@ -206,7 +206,7 @@ func extractWildcardIdents(d Detection, g *glob.Glob) ([]interface{}, error) {
 		return nil, fmt.Errorf("passed glob was nil (failed to compile)")
 	}
 	rules := make([]interface{}, 0)
-	for k, v := range d {
+	for k, v := range d.Fields {
 		if (*g).Match(k) {
 			rules = append(rules, v)
 		}
@@ -220,7 +220,7 @@ func extractWildcardIdents(d Detection, g *glob.Glob) ([]interface{}, error) {
 func extractAllToRules(d Detection) ([]Branch, error) {
 	rules := make([]Branch, 0)
 	for k, v := range d.Extract() {
-		b, err := newRuleFromIdent(v, checkIdentType(k, v))
+		b, err := newRuleFromIdent(v, checkIdentType(k, v), d.NoCollapseWS)
 		if err != nil {
 			return nil, err
 		}
