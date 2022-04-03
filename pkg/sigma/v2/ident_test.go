@@ -336,7 +336,7 @@ func TestParseIdent(t *testing.T) {
 		if err := yaml.Unmarshal([]byte(c.Rule), &r); err != nil {
 			t.Fatalf("ident case %d yaml parse fail: %s", i+1, err)
 		}
-		condition, ok := r.Detection.Fields["condition"].(string)
+		condition, ok := r.Detection["condition"].(string)
 		if !ok {
 			t.Fatalf("ident case %d missing condition", i+1)
 		}
@@ -347,7 +347,7 @@ func TestParseIdent(t *testing.T) {
 		for item := range l.items {
 			switch item.T {
 			case TokIdentifier:
-				val, ok := r.Detection.Fields[item.Val]
+				val, ok := r.Detection[item.Val]
 				if !ok {
 					t.Fatalf("ident case %d missing ident %s or unable to extract", i+1, item.Val)
 				}

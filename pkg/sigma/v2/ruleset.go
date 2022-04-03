@@ -53,7 +53,7 @@ func NewRuleset(c Config) (*Ruleset, error) {
 		return nil, err
 	}
 	var fail, unsupp int
-	rules, err := NewRuleList(files, !c.FailOnYamlParse, c.NoCollapseWS)
+	rules, err := NewRuleList(files, !c.FailOnYamlParse)
 	if err != nil {
 		switch e := err.(type) {
 		case ErrBulkParseYaml:
