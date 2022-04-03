@@ -551,11 +551,11 @@ func TestParse(t *testing.T) {
 		if err := yaml.Unmarshal([]byte(c.Rule), &rule); err != nil {
 			t.Fatalf("rule parse case %d failed to unmarshal yaml, %s", i+1, err)
 		}
-		rule.NoCollapseWS = c.noCollapseWSNeg
-		expr := rule.Detection.Fields["condition"].(string)
+		expr := rule.Detection["condition"].(string)
 		p := &parser{
-			lex:   lex(expr),
-			sigma: rule.Detection,
+			lex:          lex(expr),
+			sigma:        rule.Detection,
+			noCollapseWS: c.noCollapseWSNeg,
 		}
 		if err := p.collect(); err != nil {
 			t.Fatalf("rule parser case %d failed to collect lexical tokens, %s", i+1, err)
