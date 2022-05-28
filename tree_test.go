@@ -21,21 +21,21 @@ func TestTreeParse(t *testing.T) {
 
 		var obj datamodels.Map
 		// Positive cases
-		for _, c := range c.Pos {
-			if err := json.Unmarshal([]byte(c), &obj); err != nil {
+		for _, x := range c.Pos {
+			if err := json.Unmarshal([]byte(x), &obj); err != nil {
 				t.Fatalf("tree parsercase %d positive case json unmarshal error %s", i+1, err)
 			}
-			match, _ := p.Match(obj)
+			match, _ := p.MatchEx(obj, c.lookupMap)
 			if !match {
 				t.Fatalf("tree parser case %d positive case did not match", i+1)
 			}
 		}
 		// Negative cases
-		for _, c := range c.Neg {
-			if err := json.Unmarshal([]byte(c), &obj); err != nil {
+		for _, x := range c.Neg {
+			if err := json.Unmarshal([]byte(x), &obj); err != nil {
 				t.Fatalf("tree parser case %d positive case json unmarshal error %s", i+1, err)
 			}
-			match, _ := p.Match(obj)
+			match, _ := p.MatchEx(obj, c.lookupMap)
 			if match {
 				t.Fatalf("tree parser case %d negative case matched", i+1)
 			}

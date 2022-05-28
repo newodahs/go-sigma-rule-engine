@@ -96,11 +96,15 @@ loop:
 }
 
 func (r *Ruleset) EvalAll(e Event) (Results, bool) {
+	return r.EvalAllEx(e, nil)
+}
+
+func (r *Ruleset) EvalAllEx(e Event, lookup PlaceholderLookup) (Results, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	results := make(Results, 0)
 	for _, rule := range r.Rules {
-		if res, match := rule.Eval(e); match {
+		if res, match := rule.EvalEx(e, lookup); match {
 			results = append(results, *res)
 		}
 	}

@@ -17,8 +17,16 @@ func (t Tree) Match(e Event) (bool, bool) {
 	return t.Root.Match(e)
 }
 
+func (t Tree) MatchEx(e Event, lookup PlaceholderLookup) (bool, bool) {
+	return t.Root.MatchEx(e, lookup)
+}
+
 func (t Tree) Eval(e Event) (*Result, bool) {
-	match, applicable := t.Match(e)
+	return t.EvalEx(e, nil)
+}
+
+func (t Tree) EvalEx(e Event, lookup PlaceholderLookup) (*Result, bool) {
+	match, applicable := t.MatchEx(e, lookup)
 	if !applicable {
 		return nil, false
 	}
