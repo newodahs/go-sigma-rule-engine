@@ -1,5 +1,7 @@
 package sigma
 
+type PlaceholderLookup func(string) ([]string, bool)
+
 // Keyworder implements keywords sigma rule type on arbitrary event
 // Should return list of fields that are relevant for rule matching
 type Keyworder interface {
@@ -24,6 +26,7 @@ type Event interface {
 type Matcher interface {
 	// Match implements Matcher
 	Match(Event) (bool, bool)
+	MatchEx(Event, PlaceholderLookup) (bool, bool)
 }
 
 // Branch implements Matcher with additional methods for walking and debugging the tree

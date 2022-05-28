@@ -492,10 +492,96 @@ var detection14_case = `
 }
 `
 
+var detection15 = `
+detection:
+  condition: "selection1 and selection2 and selection3"
+  selection1:
+    SomeKey: '%ValuePlaceholder%'
+  selection2:
+    SomeKey2:
+    - '%ValuePlaceholder2%'
+    - '%%NotAPlaceholder'
+    - '%NotAPlaceholder%/APath/In/Windows'
+  selection3:
+    SomeKey3|contains:
+    - '%PlaceholderCannotBeInContains%'
+    - 'StillnotA%Placeholder%'
+    - 'Wild%Placeholder'
+`
+
+//case 1: first two keys should have values in their respective maps; third key can never be a placeholder so must match as a contains
+var detection15_positive = `
+{
+	"SomeKey":		"ThisValueShouldBeInMap",
+	"SomeKey2":		"ThisValueShouldBeInMap2",
+	"SomeKey3":		"%PlaceholderCannotBeInContains%"
+}
+`
+
+//case 2: Mix of placeholder (SomeKey) and non-placeholder matching where there is a placeholder mixed in (SomeKey2)
+var detection15_positive2 = `
+{
+	"SomeKey":		"ThisIsAlsoInTheMap",
+	"SomeKey2":		"%NotAPlaceholder%/APath/In/Windows",
+	"SomeKey3":		"In Contains StillnotA%Placeholder%"
+}
+`
+
+//case 3: Mix of placeholder (SomeKey) and non-placeholder matching where there is a placeholder mixed in (SomeKey2); different matching of non-placeholder
+var detection15_positive3 = `
+{
+	"SomeKey":		"ThisValueShouldBeInMap",
+	"SomeKey2":		"%%NotAPlaceholder",
+	"SomeKey3":		"Wild%Placeholder In Contains"
+}
+`
+
+//case 1: SomeKey not found (placeholder)
+var detection15_negative = `
+{
+	"SomeKey":		"ThisValueIsNOTInMap",
+	"SomeKey2":		"ThisValueShouldBeInMap2",
+	"SomeKey3":		"%PlaceholderCannotBeInContains%"
+}
+`
+
+//case 2: SomeKey2 not found
+var detection15_negative2 = `
+{
+	"SomeKey":		"ThisValueShouldBeInMap",
+	"SomeKey2":		"ThisValueIsNOTInMap",
+	"SomeKey3":		"%PlaceholderCannotBeInContains%"
+}
+`
+
+//case 3: Placeholders match, non-placeholder does not
+var detection15_negative3 = `
+{
+	"SomeKey":		"ThisValueShouldBeInMap",
+	"SomeKey2":		"ThisValueShouldBeInMap2",
+	"SomeKey3":		"NotFoundAnywhere"
+}
+`
+
 type parseTestCase struct {
 	Rule            string
 	Pos, Neg        []string
 	noCollapseWSNeg bool
+	lookupMap       PlaceholderLookup
+}
+
+//a simplistic lookup function for testing placeholders
+func PlaceholderLookupT1(key string) ([]string, bool) {
+	var testMap = map[string][]string{
+		"ValuePlaceholder":  {"ThisValueShouldBeInMap", "ThisIsAlsoInTheMap"},
+		"ValuePlaceholder2": {"ThisValueShouldBeInMap2", "AnotherValue"},
+	}
+
+	set, found := testMap[key]
+	if !found {
+		return nil, false
+	}
+	return set, found
 }
 
 var parseTestCases = []parseTestCase{
@@ -574,6 +660,12 @@ var parseTestCases = []parseTestCase{
 		Neg:             []string{detection14_case},
 		noCollapseWSNeg: true, //turns off whitespace collapsing and causing a non-match
 	},
+	{
+		Rule:      detection15, //placeholder testing
+		Pos:       []string{detection15_positive, detection15_positive2, detection15_positive3},
+		Neg:       []string{detection15_negative, detection15_negative2, detection15_negative3},
+		lookupMap: PlaceholderLookupT1,
+	},
 }
 
 func TestTokenCollect(t *testing.T) {
@@ -616,21 +708,21 @@ func TestParse(t *testing.T) {
 		}
 		var obj datamodels.Map
 		// Positive cases
-		for _, c := range c.Pos {
-			if err := json.Unmarshal([]byte(c), &obj); err != nil {
+		for _, x := range c.Pos {
+			if err := json.Unmarshal([]byte(x), &obj); err != nil {
 				t.Fatalf("rule parser case %d positive case json unmarshal error %s", i+1, err)
 			}
-			m, _ := p.result.Match(obj)
+			m, _ := p.result.MatchEx(obj, c.lookupMap)
 			if !m {
-				t.Fatalf("rule parser case %d positive case did not match", i+1)
+				t.Fatalf("rule parser case %d positive case did not match: %+v", i+1, obj)
 			}
 		}
 		// Negative cases
-		for _, c := range c.Neg {
-			if err := json.Unmarshal([]byte(c), &obj); err != nil {
+		for _, x := range c.Neg {
+			if err := json.Unmarshal([]byte(x), &obj); err != nil {
 				t.Fatalf("rule parser case %d positive case json unmarshal error %s", i+1, err)
 			}
-			m, _ := p.result.Match(obj)
+			m, _ := p.result.MatchEx(obj, c.lookupMap)
 			if m {
 				t.Fatalf("rule parser case %d negative case matched", i+1)
 			}

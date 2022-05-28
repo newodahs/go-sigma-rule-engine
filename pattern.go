@@ -65,7 +65,7 @@ func NewNumMatcher(patterns ...int) (NumMatcher, error) {
 // StringMatcher is an atomic pattern that could implement glob, literal or regex matchers
 type StringMatcher interface {
 	// StringMatch implements StringMatcher
-	StringMatch(string) bool
+	StringMatch(string, PlaceholderLookup) bool
 }
 
 var gWSCollapse = regexp.MustCompile(`\s+`)
@@ -165,6 +165,18 @@ func escapeSigmaForGlob(str string) string {
 	return string(replStr[x:])
 }
 
+//this intentionally should only match a string that looks like: %String%
+var gFindPlaceholder = regexp.MustCompile(`^%([a-zA-Z0-9]+)%$`)
+
+func getPlaceholder(str string) string {
+	PHList := gFindPlaceholder.FindStringSubmatch(str)
+	if len(PHList) > 1 { //must have at least two entries from submatch
+		return PHList[1]
+	}
+
+	return ""
+}
+
 func NewStringMatcher(
 	mod TextPatternModifier,
 	lower, all, noCollapseWS bool,
@@ -174,6 +186,7 @@ func NewStringMatcher(
 		return nil, fmt.Errorf("no patterns defined for matcher object")
 	}
 	matcher := make([]StringMatcher, 0)
+patternLoop:
 	for _, p := range patterns {
 		//process modifiers first
 		switch mod {
@@ -212,6 +225,7 @@ func NewStringMatcher(
 				//to be a regex, always process it as a 'contains' style glob (can appear anywhere...)
 				//this is due, I believe, on how keywords are generally handled, where it is likely a random
 				//string or event long message that may have additional detail/etc...
+				//keywords can NOT be placeholders today (is this allowable by spec?  unclear...)
 				p = handleWhitespace(p, noCollapseWS)
 				// In this condition, we need to ensure single backslashes, etc... are escaped correctly before throwing the globs on either side
 				p = escapeSigmaForGlob(p)
@@ -231,8 +245,17 @@ func NewStringMatcher(
 				}
 				matcher = append(matcher, GlobPattern{Glob: &globNG, NoCollapseWS: noCollapseWS})
 			} else {
-				p = handleWhitespace(p, noCollapseWS)
-				matcher = append(matcher, ContentPattern{Token: p, Lowercase: lower, NoCollapseWS: noCollapseWS})
+				//first and foremost, look to see if we're a placeholder
+				if ph := getPlaceholder(p); ph != "" {
+					//placeholders are special; they're basically a callback to lookup (expand) a rule based on incoming data
+					//for us, we'll take the incoming data and pass it up to the caller with a key reference to use to lookup
+					//the value in their own dictionary; they must return true if it matches or false if it doesn't
+					matcher = append(matcher, ContentPattern{Token: ph, Lowercase: lower, NoCollapseWS: noCollapseWS, PlaceholdMatch: true})
+					continue patternLoop
+				}
+
+				p = handleWhitespace(p, noCollapseWS) //only collapse WS if this isn't a placeholder variable
+				matcher = append(matcher, ContentPattern{Token: p, Lowercase: lower, NoCollapseWS: noCollapseWS, PlaceholdMatch: false})
 			}
 		}
 	}
@@ -253,12 +276,12 @@ func NewStringMatcher(
 type StringMatchers []StringMatcher
 
 // StringMatch implements StringMatcher
-func (s StringMatchers) StringMatch(msg string) bool {
+func (s StringMatchers) StringMatch(msg string, lookup PlaceholderLookup) bool {
 	for _, m := range s {
 		//I thought about a type assertion here for handling whitespace
 		//however, as we're dealing with non-pointer types, that may cause
 		//some added overhead that we can avoid by just implementing where need to
-		if m.StringMatch(msg) {
+		if m.StringMatch(msg, lookup) {
 			return true
 		}
 	}
@@ -277,10 +300,10 @@ func (s StringMatchers) Optimize() StringMatchers {
 // used to implement "all" specifier for selection types
 type StringMatchersConj []StringMatcher
 
-// StringMatch implements StringMatcher
-func (s StringMatchersConj) StringMatch(msg string) bool {
+// StringMatch implements StringMatcher; does not support placeholders
+func (s StringMatchersConj) StringMatch(msg string, lookup PlaceholderLookup) bool {
 	for _, m := range s {
-		if !m.StringMatch(msg) {
+		if !m.StringMatch(msg, lookup) {
 			return false
 		}
 	}
@@ -313,14 +336,32 @@ func optimizeStringMatchers(s []StringMatcher) []StringMatcher {
 
 // ContentPattern is a token for literal content matching
 type ContentPattern struct {
-	Token        string
-	Lowercase    bool
-	NoCollapseWS bool
+	Token          string
+	Lowercase      bool
+	NoCollapseWS   bool
+	PlaceholdMatch bool
 }
 
 // StringMatch implements StringMatcher
-func (c ContentPattern) StringMatch(msg string) bool {
+func (c ContentPattern) StringMatch(msg string, lookup PlaceholderLookup) bool {
 	msg = handleWhitespace(msg, c.NoCollapseWS)
+
+	if c.PlaceholdMatch {
+		if lookup != nil {
+			if lSet, found := lookup(c.Token); found {
+				for _, lVal := range lSet {
+					lVal = handleWhitespace(lVal, c.NoCollapseWS)
+					if lowerCaseIfNeeded(msg, c.Lowercase) == lowerCaseIfNeeded(lVal, c.Lowercase) {
+						return true
+					}
+				}
+			}
+			return false //return false when we either don't find the lookup OR do find the lookup but don't match
+		}
+		//reset tok in this case to have the placeholder markers on either side (it may be expected)
+		c.Token = `%` + c.Token + `%` //direct assignment is fine here as we're not a pointer reciever
+	}
+
 	return lowerCaseIfNeeded(msg, c.Lowercase) == lowerCaseIfNeeded(c.Token, c.Lowercase)
 }
 
@@ -331,8 +372,8 @@ type PrefixPattern struct {
 	NoCollapseWS bool
 }
 
-// StringMatch implements StringMatcher
-func (c PrefixPattern) StringMatch(msg string) bool {
+// StringMatch implements StringMatcher; does not support placeholders and should never by spec
+func (c PrefixPattern) StringMatch(msg string, lookup PlaceholderLookup) bool {
 	msg = handleWhitespace(msg, c.NoCollapseWS)
 	return strings.HasPrefix(
 		lowerCaseIfNeeded(msg, c.Lowercase),
@@ -347,8 +388,8 @@ type SuffixPattern struct {
 	NoCollapseWS bool
 }
 
-// StringMatch implements StringMatcher
-func (c SuffixPattern) StringMatch(msg string) bool {
+// StringMatch implements StringMatcher; does not support placeholders and should never by spec
+func (c SuffixPattern) StringMatch(msg string, lookup PlaceholderLookup) bool {
 	msg = handleWhitespace(msg, c.NoCollapseWS)
 	return strings.HasSuffix(
 		lowerCaseIfNeeded(msg, c.Lowercase),
@@ -361,8 +402,8 @@ type RegexPattern struct {
 	Re *regexp.Regexp
 }
 
-// StringMatch implements StringMatcher
-func (r RegexPattern) StringMatch(msg string) bool {
+// StringMatch implements StringMatcher; does not support placeholders and should never by spec
+func (r RegexPattern) StringMatch(msg string, lookup PlaceholderLookup) bool {
 	return r.Re.MatchString(msg)
 }
 
@@ -372,8 +413,8 @@ type GlobPattern struct {
 	NoCollapseWS bool
 }
 
-// StringMatch implements StringMatcher
-func (g GlobPattern) StringMatch(msg string) bool {
+// StringMatch implements StringMatcher; does not support placeholders and should never by spec
+func (g GlobPattern) StringMatch(msg string, lookup PlaceholderLookup) bool {
 	msg = handleWhitespace(msg, g.NoCollapseWS)
 	return (*g.Glob).Match(msg)
 }
@@ -384,8 +425,8 @@ type SimplePattern struct {
 	NoCollapseWS bool
 }
 
-// StringMatch implements StringMatcher
-func (s SimplePattern) StringMatch(msg string) bool {
+// StringMatch implements StringMatcher; does not support placeholders (but this one could)
+func (s SimplePattern) StringMatch(msg string, lookup PlaceholderLookup) bool {
 	msg = handleWhitespace(msg, s.NoCollapseWS)
 	return strings.Contains(msg, s.Token)
 }

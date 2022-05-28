@@ -77,12 +77,16 @@ type Keyword struct {
 
 // Match implements Matcher
 func (k Keyword) Match(msg Event) (bool, bool) {
+	return k.MatchEx(msg, nil)
+}
+
+func (k Keyword) MatchEx(msg Event, lookup PlaceholderLookup) (bool, bool) {
 	msgs, ok := msg.Keywords()
 	if !ok {
 		return false, false
 	}
 	for _, m := range msgs {
-		if k.S.StringMatch(m) {
+		if k.S.StringMatch(m, lookup) {
 			return true, true
 		}
 	}
@@ -148,6 +152,10 @@ type Selection struct {
 // Match implements Matcher
 // TODO - numeric and boolean pattern match
 func (s Selection) Match(msg Event) (bool, bool) {
+	return s.MatchEx(msg, nil)
+}
+
+func (s Selection) MatchEx(msg Event, lookup PlaceholderLookup) (bool, bool) {
 	for _, v := range s.N {
 		val, ok := msg.Select(v.Key)
 		if !ok {
@@ -207,12 +215,12 @@ func (s Selection) Match(msg Event) (bool, bool) {
 		}
 		switch vt := val.(type) {
 		case string:
-			if !v.Pattern.StringMatch(vt) {
+			if !v.Pattern.StringMatch(vt, lookup) {
 				return false, true
 			}
 		case float64:
 			// TODO - tmp hack that also loses floating point accuracy
-			if !v.Pattern.StringMatch(strconv.Itoa(int(vt))) {
+			if !v.Pattern.StringMatch(strconv.Itoa(int(vt)), lookup) {
 				return false, true
 			}
 		default:

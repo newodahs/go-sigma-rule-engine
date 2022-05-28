@@ -5,8 +5,12 @@ type NodeSimpleAnd []Branch
 
 // Match implements Matcher
 func (n NodeSimpleAnd) Match(e Event) (bool, bool) {
+	return n.MatchEx(e, nil)
+}
+
+func (n NodeSimpleAnd) MatchEx(e Event, lookup PlaceholderLookup) (bool, bool) {
 	for _, b := range n {
-		match, applicable := b.Match(e)
+		match, applicable := b.MatchEx(e, lookup)
 		if !match || !applicable {
 			return match, applicable
 		}
@@ -45,9 +49,13 @@ func (n NodeSimpleOr) Reduce() Branch {
 
 // Match implements Matcher
 func (n NodeSimpleOr) Match(e Event) (bool, bool) {
+	return n.MatchEx(e, nil)
+}
+
+func (n NodeSimpleOr) MatchEx(e Event, lookup PlaceholderLookup) (bool, bool) {
 	var oneApplicable bool
 	for _, b := range n {
-		match, applicable := b.Match(e)
+		match, applicable := b.MatchEx(e, lookup)
 		if match {
 			return true, true
 		}
@@ -65,7 +73,11 @@ type NodeNot struct {
 
 // Match implements Matcher
 func (n NodeNot) Match(e Event) (bool, bool) {
-	match, applicable := n.B.Match(e)
+	return n.MatchEx(e, nil)
+}
+
+func (n NodeNot) MatchEx(e Event, lookup PlaceholderLookup) (bool, bool) {
+	match, applicable := n.B.MatchEx(e, lookup)
 	if !applicable {
 		return match, applicable
 	}
@@ -80,11 +92,15 @@ type NodeAnd struct {
 
 // Match implements Matcher
 func (n NodeAnd) Match(e Event) (bool, bool) {
-	lMatch, lApplicable := n.L.Match(e)
+	return n.MatchEx(e, nil)
+}
+
+func (n NodeAnd) MatchEx(e Event, lookup PlaceholderLookup) (bool, bool) {
+	lMatch, lApplicable := n.L.MatchEx(e, lookup)
 	if !lMatch {
 		return false, lApplicable
 	}
-	rMatch, rApplicable := n.R.Match(e)
+	rMatch, rApplicable := n.R.MatchEx(e, lookup)
 	return lMatch && rMatch, lApplicable && rApplicable
 }
 
@@ -96,11 +112,15 @@ type NodeOr struct {
 
 // Match implements Matcher
 func (n NodeOr) Match(e Event) (bool, bool) {
-	lMatch, lApplicable := n.L.Match(e)
+	return n.MatchEx(e, nil)
+}
+
+func (n NodeOr) MatchEx(e Event, lookup PlaceholderLookup) (bool, bool) {
+	lMatch, lApplicable := n.L.MatchEx(e, lookup)
 	if lMatch {
 		return true, lApplicable
 	}
-	rMatch, rApplicable := n.R.Match(e)
+	rMatch, rApplicable := n.R.MatchEx(e, lookup)
 	return lMatch || rMatch, lApplicable || rApplicable
 }
 
